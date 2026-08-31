@@ -6,7 +6,7 @@
   
 */
 
-CFBundleName = "azooKey";
+CFBundleName = "azooKey Fork";
 
-com.apple.inputmethod.Roman = "azooKey (English)";
-com.apple.inputmethod.Japanese = "azooKey (日本語)";
+com.apple.inputmethod.Roman = "azooKey Fork (English)";
+com.apple.inputmethod.Japanese = "azooKey Fork (日本語)";

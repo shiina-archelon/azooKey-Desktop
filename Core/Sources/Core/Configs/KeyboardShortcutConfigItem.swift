@@ -72,6 +72,6 @@ extension Config {
         public init() {}
 
         public static let `default`: KeyboardShortcut = .defaultTransformShortcut
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.transform_shortcut"
+        public static let key: String = "jp.archelon-inc.inputmethod.azooKeyMac.preference.transform_shortcut"
     }
 }

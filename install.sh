@@ -5,7 +5,9 @@ IGNORE_LINT=false
 DRY_RUN=false
 NO_PKILL=false
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_APP_PATH="/Library/Input Methods/azooKeyMac.app"
+# 純正 azooKey (/Library/Input Methods/azooKeyMac.app) と併存させるため別名で設置する。
+# bundle ID も別なので、入力ソース一覧に 2 つ並んで切り替えられる。
+INSTALL_APP_PATH="/Library/Input Methods/azooKeyForkMac.app"
 
 # Parse command-line options
 while [[ "$#" -gt 0 ]]; do
@@ -47,16 +49,16 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: Would execute the following commands:"
-    echo "  sudo rm -rf /Library/Input\ Methods/azooKeyMac.app"
-    echo "  sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/"
+    echo "  sudo rm -rf \"${INSTALL_APP_PATH}\""
+    echo "  sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app \"${INSTALL_APP_PATH}\""
     echo "  ${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh \"${INSTALL_APP_PATH}\""
     if [ "$NO_PKILL" = false ]; then
         echo "  pkill azooKeyMac || true"
     fi
     echo "Build completed successfully. Use without --dry-run to actually install."
 else
-    sudo rm -rf /Library/Input\ Methods/azooKeyMac.app
-    sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/
+    sudo rm -rf "${INSTALL_APP_PATH}"
+    sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app "${INSTALL_APP_PATH}"
     "${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh" "${INSTALL_APP_PATH}"
     if [ "$NO_PKILL" = false ]; then
         pkill azooKeyMac || true
