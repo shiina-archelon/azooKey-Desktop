@@ -65,6 +65,8 @@ public final class SegmentsManager {
         public var displayText: String
         public var appendText: String
         public var deleteCount: Int = 0
+        /// 表示のもとになった変換器の候補。受け入れたことを変換器へ伝えるのに使う
+        public var candidate: Candidate?
     }
 
     struct BackspaceTypoCorrectionLock: Sendable {
@@ -861,6 +863,11 @@ public final class SegmentsManager {
         return [backspaceAdjustedPredictionCandidate]
     }
 
+    /// 予測候補を受け入れたことを変換器へ伝える。以降の変換では、その候補の表記が先頭の制約になる
+    public func acceptPredictionCandidate(_ candidate: Candidate) {
+        self.kanaKanjiConverter.setPrefixCandidate(candidate)
+    }
+
     public static func preferredPredictionCandidates(
         typoCorrectionCandidates: [PredictionCandidate],
         predictionCandidates: [PredictionCandidate]
@@ -898,11 +905,12 @@ public final class SegmentsManager {
             guard !reading.isEmpty else {
                 continue
             }
-            if let predictionCandidate = Self.makePredictionCandidate(
+            if var predictionCandidate = Self.makePredictionCandidate(
                 currentTarget: target,
                 candidateReading: reading,
                 displayText: candidate.text
             ) {
+                predictionCandidate.candidate = candidate
                 return [predictionCandidate]
             }
         }

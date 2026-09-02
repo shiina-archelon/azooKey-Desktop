@@ -373,6 +373,10 @@ extension ConverterServer {
         guard !prediction.appendText.isEmpty else {
             return
         }
+        if let candidate = prediction.candidate {
+            // 読みを補完する前に伝える。補完後の再変換で候補の表記が先頭の制約になる
+            manager.acceptPredictionCandidate(candidate)
+        }
         manager.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
     }
 }
