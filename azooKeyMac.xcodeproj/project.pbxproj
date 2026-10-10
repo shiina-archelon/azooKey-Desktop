@@ -20,6 +20,7 @@
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
 		55A9C54B2BA847A1007F6F02 /* main@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 55A9C54A2BA847A1007F6F02 /* main@2x.tiff */; };
+		F10000000000000000000001 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = F10000000000000000000002 /* Core */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +59,8 @@
 		55A27D012BAAADDB00512DCD /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		55A9C54A2BA847A1007F6F02 /* main@2x.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = "main@2x.tiff"; sourceTree = "<group>"; };
 		55D3B7632DB36BDE00044FD1 /* Core */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Core; sourceTree = "<group>"; };
+		F10000000000000000000003 /* ConverterServer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ConverterServer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F10000000000000000000004 /* ConverterServer.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Tools/ConverterServer.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -67,6 +70,7 @@
 		55CE06ED2CB01F160002DAF1 /* azooKeyMacTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacTests; sourceTree = "<group>"; };
 		55CE06F12CB01F160002DAF1 /* azooKeyMacUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacUITests; sourceTree = "<group>"; };
 		55CE06F52CB01F180002DAF1 /* Preview Content */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "Preview Content"; sourceTree = "<group>"; };
+		F10000000000000000000005 /* ConverterServer */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Core/Sources/ConverterServer; sourceTree = SOURCE_ROOT; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +96,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F10000000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F10000000000000000000001 /* Core in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -99,6 +111,8 @@
 			isa = PBXGroup;
 			children = (
 				55D3B7632DB36BDE00044FD1 /* Core */,
+				F10000000000000000000005 /* ConverterServer */,
+				F10000000000000000000004 /* ConverterServer.xcconfig */,
 				1A41E61626E745D9009B65D7 /* azooKeyMac */,
 				55CE06ED2CB01F160002DAF1 /* azooKeyMacTests */,
 				55CE06F12CB01F160002DAF1 /* azooKeyMacUITests */,
@@ -110,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				1A41E61426E745D9009B65D7 /* azooKeyMac.app */,
+				F10000000000000000000003 /* ConverterServer.app */,
 				1A41E62426E745DD009B65D7 /* azooKeyMacTests.xctest */,
 				1A41E62E26E745DD009B65D7 /* azooKeyMacUITests.xctest */,
 			);
@@ -165,6 +180,7 @@
 			);
 			dependencies = (
 				554A26622DB3765F003C5CFB /* PBXTargetDependency */,
+				F10000000000000000000009 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				55CE06C72CB01F000002DAF1 /* InputController */,
@@ -222,6 +238,23 @@
 			productReference = 1A41E62E26E745DD009B65D7 /* azooKeyMacUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		F1000000000000000000000A /* ConverterServer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F1000000000000000000000B /* Build configuration list for PBXNativeTarget "ConverterServer" */;
+			buildPhases = (
+				F10000000000000000000007 /* Sources */,
+				F10000000000000000000006 /* Frameworks */,
+				F10000000000000000000008 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (F10000000000000000000005 /* ConverterServer */,);
+			name = ConverterServer;
+			packageProductDependencies = (F10000000000000000000002 /* Core */,);
+			productName = ConverterServer;
+			productReference = F10000000000000000000003 /* ConverterServer.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -261,6 +294,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				F1000000000000000000000A /* ConverterServer */,
 				1A41E61326E745D9009B65D7 /* azooKeyMac */,
 				1A41E62326E745DD009B65D7 /* azooKeyMacTests */,
 				1A41E62D26E745DD009B65D7 /* azooKeyMacUITests */,
@@ -301,6 +335,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F10000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -318,7 +359,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/ConverterServer/ConverterServer",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/ConverterServer.app/Contents/MacOS/ConverterServer",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -349,6 +390,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F10000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -366,6 +414,7 @@
 			isa = PBXTargetDependency;
 			productRef = 554A26612DB3765F003C5CFB /* Core */;
 		};
+		F10000000000000000000009 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = F1000000000000000000000A /* ConverterServer */; };
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -529,6 +578,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ensan.inputmethod.azooKeyMac;
+				REGISTER_APP_GROUPS = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objcxx;
@@ -565,6 +615,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ensan.inputmethod.azooKeyMac;
+				REGISTER_APP_GROUPS = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objcxx;
@@ -672,6 +723,18 @@
 			};
 			name = Release;
 		};
+		F1000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F10000000000000000000004 /* ConverterServer.xcconfig */;
+			buildSettings = {};
+			name = Debug;
+		};
+		F1000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F10000000000000000000004 /* ConverterServer.xcconfig */;
+			buildSettings = {};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -711,6 +774,12 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		F1000000000000000000000B /* Build configuration list for PBXNativeTarget "ConverterServer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (F1000000000000000000000C /* Debug */, F1000000000000000000000D /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -730,6 +799,7 @@
 			package = 554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */;
 			productName = Core;
 		};
+		F10000000000000000000002 /* Core */ = {isa = XCSwiftPackageProductDependency; productName = Core; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1A41E60C26E745D9009B65D7 /* Project object */;

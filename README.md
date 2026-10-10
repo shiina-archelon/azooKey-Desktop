@@ -99,8 +99,10 @@ ls -lh azooKeyMac/Resources/zenz-v3.1-small-gguf/ggml-model-Q5_K_M.gguf
 `install.sh` はアーカイブビルドを行うため、Xcode上で署名設定が通っている必要があります。Apple Developer Programに加入していない場合は、Personal Teamでの署名に切り替えてください。
 
 * `azooKeyMac.xcodeproj` を Xcode で開く
-* azooKeyMac ターゲット → Signing & Capabilities で Team を自身の Personal Team に変更
+* azooKeyMac と ConverterServer ターゲット → Signing & Capabilities で Team を自身の Personal Team に変更
 * リポジトリ内のバンドルID（`dev.ensan.inputmethod.azooKeyMac` など）を、自身の所有するプレフィックスに一括置換（例: `dev.yourname.inputmethod.azooKeyMac`）
+
+IME本体とConverterServerは、同じApp Groupの既存データを使用します。両ターゲットでApp Groupを認証するプロファイルが必要です。自動署名では`REGISTER_APP_GROUPS`を有効にしています。CLIでプロファイルを取得・更新するときは、`xcodebuild`に`-allowProvisioningUpdates`を指定してください。[Appleの説明](https://developer.apple.com/documentation/xcode/accessing-app-group-containers)
 
 #### 3. ビルド＆インストール
 

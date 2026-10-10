@@ -113,7 +113,9 @@ extension ConverterServer {
         if let executableURL = Bundle.main.executableURL {
             var directoryURL = executableURL.deletingLastPathComponent()
             while directoryURL.path != "/" {
-                if directoryURL.lastPathComponent == "Contents" {
+                // 入力モデルはIME本体のResourcesから読み込む。
+                if directoryURL.lastPathComponent == "Contents",
+                   directoryURL.deletingLastPathComponent().lastPathComponent != "ConverterServer.app" {
                     return directoryURL.appendingPathComponent("Resources", isDirectory: true)
                 }
                 directoryURL.deleteLastPathComponent()
