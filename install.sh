@@ -49,17 +49,17 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: Would execute the following commands:"
+    echo "  sudo ${REPO_ROOT}/Tools/remove_converter_server_launch_agent.sh"
     echo "  sudo rm -rf \"${INSTALL_APP_PATH}\""
     echo "  sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app \"${INSTALL_APP_PATH}\""
-    echo "  ${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh \"${INSTALL_APP_PATH}\""
     if [ "$NO_PKILL" = false ]; then
         echo "  pkill azooKeyMac || true"
     fi
     echo "Build completed successfully. Use without --dry-run to actually install."
 else
+    sudo "${REPO_ROOT}/Tools/remove_converter_server_launch_agent.sh"
     sudo rm -rf "${INSTALL_APP_PATH}"
     sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app "${INSTALL_APP_PATH}"
-    "${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh" "${INSTALL_APP_PATH}"
     if [ "$NO_PKILL" = false ]; then
         pkill azooKeyMac || true
     fi
