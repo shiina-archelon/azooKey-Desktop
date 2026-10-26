@@ -1,4 +1,11 @@
-# azooKey on macOS
+# azooKey on macOS (Fork Uparupa版)
+
+[azooKey on macOS](https://github.com/azooKey/azooKey-Desktop)のForkです。本家との主な違いは次のとおりです。
+
+- 未確定文字列を左右キーで移動し、途中の文字を修正できます（候補選択中を除く）。
+- 候補選択中にPage Up / Page Downでページ移動できます。最初のページでPage Upを押すと、文字種の候補を表示します。
+
+独自機能を利用する場合は、`fork/main`ブランチをビルドしてください。以下のリリース版・Homebrewによるインストール案内は、本家の配布版についての説明です。
 
 [azooKey](https://github.com/ensan-hcl/azooKey)のmacOS版です。高精度なニューラルかな漢字変換エンジン「Zenzai」を導入した、オープンソースの日本語入力システムです。
 
