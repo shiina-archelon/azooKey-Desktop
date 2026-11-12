@@ -250,10 +250,6 @@ public final class SegmentsManager {
 
     @MainActor
     public func activate() {
-        self.shouldShowCandidateWindow = false
-        self.backspaceAdjustedPredictionCandidate = nil
-        self.backspaceTypoCorrectionLock = nil
-        self.lastInputStyle = .direct
         self.zenzaiPersonalizationMode = self.getZenzaiPersonalizationMode()
     }
 
@@ -274,20 +270,10 @@ public final class SegmentsManager {
 
     @MainActor
     public func deactivate(flushLearningData: Bool = true) {
-        self.withConverter { $0.stopComposition() }
+        // 入力セッションはウィンドウを切り替えても存続するため、未確定入力を保持する。
         if flushLearningData {
             self.withConverter { $0.commitUpdateLearningData() }
         }
-        self.rawCandidates = nil
-        self.didExperienceSegmentEdition = false
-        self.lastOperation = .other
-        self.composingText.stopComposition()
-        self.shouldShowCandidateWindow = false
-        self.selectionIndex = nil
-        self.resetAdditionalCandidates()
-        self.backspaceAdjustedPredictionCandidate = nil
-        self.backspaceTypoCorrectionLock = nil
-        self.lastInputStyle = .direct
     }
 
     @MainActor
