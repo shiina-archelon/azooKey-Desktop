@@ -1,0 +1,13 @@
+iPhone
+Mac
+OpenAI
+ChatGPT
+Codex
+Claude
+Anthropic
+Gemini
+GPT-5
+GPT-4
+iPad
+TypeScript
+JavaScript

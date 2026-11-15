@@ -5,6 +5,7 @@ import SwiftUI
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var predictionCandidateSelectionKeys = Config.PredictionCandidateSelectionKeys()
+    @ConfigState private var mixedLanguageCandidates = Config.MixedLanguageCandidates()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
@@ -31,6 +32,7 @@ struct ConfigWindow: View {
     @State private var openAiApiKeyPopover = false
     @State private var connectionTestInProgress = false
     @State private var showingRomajiTableEditor = false
+    @State private var showingMixedLanguageLicense = false
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
     @State private var showingLearningResetConfirmation = false
@@ -265,6 +267,7 @@ struct ConfigWindow: View {
         }
 
         appDelegate.kanaKanjiConverter.resetMemory()
+        MixedLanguageDictionary.resetLearningData()
         learningResetMessage = .success
 
         // 10秒後にメッセージを消す
@@ -358,6 +361,9 @@ struct ConfigWindow: View {
                     print("Failed to save custom input table: \(error)")
                 }
             }
+        }
+        .sheet(isPresented: $showingMixedLanguageLicense) {
+            self.mixedLanguageLicenseView
         }
     }
 
@@ -495,6 +501,11 @@ struct ConfigWindow: View {
 
             Section {
                 Toggle("ライブ変換を有効化", isOn: $liveConversion)
+                Toggle("日英混在候補を有効化（試用）", isOn: $mixedLanguageCandidates)
+                    .help("Spaceでの変換と入力中の予測に、英単語を英字で残した候補を追加します。入力途中の英単語も補完し、確定した英単語は学習します。")
+                Button("日英混在辞書のライセンス") {
+                    self.showingMixedLanguageLicense = true
+                }
                 HStack {
                     TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                     helpButton(
@@ -512,6 +523,26 @@ struct ConfigWindow: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+    }
+
+    private var mixedLanguageLicenseView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("CSpell software terms").font(.headline)
+            Link("提供元・ソース", destination: URL(string: "https://github.com/streetsidesoftware/cspell-dicts/tree/cb381e7ab3963e70c95fdef8c53d3ca588a7a8d1/dictionaries/software-terms")!)
+            ScrollView {
+                Text(MixedLanguageDictionary.licenseURL.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "ライセンスを読み込めませんでした。")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Spacer()
+                Button("閉じる") { self.showingMixedLanguageLicense = false }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding()
+        .frame(width: 620, height: 440)
     }
 
     // MARK: - カスタマイズタブ

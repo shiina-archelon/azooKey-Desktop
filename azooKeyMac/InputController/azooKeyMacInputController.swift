@@ -657,6 +657,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         let predictions = self.requestPreferredPredictionCandidates()
         if predictions.isEmpty {
+            self.lastPredictionCandidates.removeAll { $0.isMixedLanguage }
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
             if elapsed < 1.0, !self.lastPredictionCandidates.isEmpty {
@@ -779,7 +780,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private func acceptPredictionCandidate() {
         let index = self.predictionViewController.currentSelectedRow
         if self.predictionWindow.isVisible, self.lastPredictionCandidates.indices.contains(index) {
-            self.segmentsManager.acceptPredictionCandidate(self.lastPredictionCandidates[index])
+            let prediction = self.lastPredictionCandidates[index]
+            self.segmentsManager.acceptPredictionCandidate(prediction)
+            if prediction.isMixedLanguage {
+                self.hidePredictionWindow()
+            }
         } else {
             self.segmentsManager.acceptPredictionCandidate()
         }
@@ -878,6 +883,25 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
 }
 
 extension azooKeyMacInputController: SegmentManagerDelegate {
+    @MainActor
+    func candidatesDidChange() {
+        if self.inputState == .composing {
+            self.refreshPredictionWindow(useCachedPosition: true)
+            return
+        }
+        guard self.inputState == .selecting,
+              case let .selecting(candidates, selectionIndex) = self.segmentsManager.getCurrentCandidateWindow(inputState: self.inputState),
+              self.candidatesWindow.isVisible else {
+            return
+        }
+        // 候補の追加では、入力先への位置問い合わせを繰り返さない。
+        self.candidatesViewController.updateCandidatePresentations(
+            self.segmentsManager.makeCandidatePresentations(candidates),
+            selectionIndex: selectionIndex,
+            cursorLocation: self.candidateCursorLocation
+        )
+    }
+
     func getLeftSideContext(maxCount: Int) -> String? {
         let endIndex = self.contextRange().location
         let leftRange = NSRange(location: max(endIndex - maxCount, 0), length: min(endIndex, maxCount))
