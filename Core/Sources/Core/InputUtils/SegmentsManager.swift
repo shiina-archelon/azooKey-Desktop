@@ -34,6 +34,7 @@ public final class SegmentsManager {
     private let conversionSessionID: KanaKanjiConverter.ConversionSessionID
 
     deinit {
+        self.mixedLanguageTask?.cancel()
         self.kanaKanjiConverter.removeSession(self.conversionSessionID)
     }
 
@@ -64,6 +65,11 @@ public final class SegmentsManager {
     }
     private var rawCandidates: ConversionResult?
     private var candidateRightSideContext: String?
+    private var mixedLanguageCandidates: [MixedLanguageCandidate] = []
+    private var mixedLanguagePredictions: [MixedLanguageCandidate] = []
+    private var acceptedMixedLanguageWords: Set<String> = []
+    private var mixedLanguageTask: Task<Void, Never>?
+    private var mixedLanguageRevision = 0
 
     private var selectionIndex: Int?
     private var didExperienceSegmentEdition = false
@@ -88,6 +94,7 @@ public final class SegmentsManager {
         public var appendText: String
         public var deleteCount: Int = 0
         var sourceCandidate: Candidate?
+        public var isMixedLanguage: Bool = false
     }
 
     struct BackspaceTypoCorrectionLock: Sendable {
@@ -100,6 +107,9 @@ public final class SegmentsManager {
         return candidates.indices.map { index in
             if index < additionalPresentations.count {
                 return .init(candidate: candidates[index], displayContext: additionalPresentations[index].displayContext)
+            }
+            if self.mixedLanguageCandidates.contains(where: { $0.candidate.text == candidates[index].text }) {
+                return .init(candidate: candidates[index], displayContext: .init(annotationText: "英字混在"))
             }
             return .init(candidate: candidates[index])
         }
@@ -267,10 +277,12 @@ public final class SegmentsManager {
     @MainActor
     public func resetLearningData() {
         self.withConverter { $0.resetMemory() }
+        MixedLanguageLearning.shared.reset()
     }
 
     @MainActor
     public func deactivate(flushLearningData: Bool = true) {
+        self.cancelMixedLanguageRequest(clearCandidates: false)
         // 入力セッションはウィンドウを切り替えても存続するため、未確定入力を保持する。
         if flushLearningData {
             self.withConverter { $0.commitUpdateLearningData() }
@@ -280,6 +292,8 @@ public final class SegmentsManager {
     @MainActor
     /// この入力を打ち切る
     public func stopComposition() {
+        self.cancelMixedLanguageRequest(clearCandidates: true)
+        self.acceptedMixedLanguageWords = []
         self.composingText.stopComposition()
         self.withConverter { $0.stopComposition() }
         self.rawCandidates = nil
@@ -297,6 +311,8 @@ public final class SegmentsManager {
     @MainActor
     /// 日本語入力自体をやめる
     public func stopJapaneseInput() {
+        self.cancelMixedLanguageRequest(clearCandidates: true)
+        self.acceptedMixedLanguageWords = []
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
@@ -338,6 +354,7 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
+        self.requestMixedLanguagePredictions()
     }
 
     @MainActor
@@ -348,6 +365,7 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
+        self.requestMixedLanguagePredictions()
     }
 
     @MainActor
@@ -355,6 +373,7 @@ public final class SegmentsManager {
         guard self.composingText.moveCursorFromCursorPosition(count: count) != 0 else {
             return
         }
+        self.cancelMixedLanguageRequest(clearCandidates: true)
         self.didExperienceSegmentEdition = false
         self.lastOperation = .moveCursor
         self.rawCandidates = nil
@@ -393,6 +412,7 @@ public final class SegmentsManager {
         self.shouldShowCandidateWindow = true
         self.selectionIndex = nil
         self.updateRawCandidate()
+        self.requestMixedLanguageCandidates()
     }
 
     @MainActor
@@ -410,6 +430,7 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
+        self.requestMixedLanguagePredictions()
         guard self.composingText.isAtEndIndex,
               Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
             self.backspaceAdjustedPredictionCandidate = nil
@@ -448,6 +469,11 @@ public final class SegmentsManager {
     @MainActor
     public func forgetMemory() {
         if let selectedCandidate {
+            let words = self.mixedLanguageWords(for: selectedCandidate)
+            if !words.isEmpty {
+                MixedLanguageLearning.shared.forget(words)
+                self.acceptedMixedLanguageWords.subtract(words)
+            }
             self.withConverter { $0.forgetMemory(selectedCandidate) }
             self.appendDebugMessage("\(#function): forget \(selectedCandidate.data.map {$0.word})")
         }
@@ -465,6 +491,29 @@ public final class SegmentsManager {
     }
 
     private var rawCandidatesList: [Candidate]? {
+        guard let original = self.standardCandidates else {
+            return nil
+        }
+        guard !self.mixedLanguageCandidates.isEmpty else {
+            return original
+        }
+        let existing = Set(original.map(\.text))
+        let mixed = self.mixedLanguageCandidates.filter { !existing.contains($0.candidate.text) }
+        let promoted = Array(mixed.filter(\.preferred).prefix(4))
+        let promotedTexts = Set(promoted.map { $0.candidate.text })
+        var result: [Candidate] = []
+        for (index, candidate) in original.enumerated() {
+            result.append(candidate)
+            if index < promoted.count {
+                result.append(promoted[index].candidate)
+            }
+        }
+        result += promoted.dropFirst(original.count).map(\.candidate)
+        result += mixed.filter { !promotedTexts.contains($0.candidate.text) }.map(\.candidate)
+        return result
+    }
+
+    private var standardCandidates: [Candidate]? {
         guard let rawCandidates else {
             return nil
         }
@@ -549,6 +598,7 @@ public final class SegmentsManager {
         forcedLeftSideContext: String? = nil,
         forcedRightSideContext: String? = nil
     ) {
+        self.cancelMixedLanguageRequest(clearCandidates: true)
         if self.lastOperation != .delete {
             self.backspaceAdjustedPredictionCandidate = nil
             self.backspaceTypoCorrectionLock = nil
@@ -613,10 +663,90 @@ public final class SegmentsManager {
     @MainActor public func update(requestRichCandidates: Bool) {
         self.updateRawCandidate(requestRichCandidates: requestRichCandidates)
         self.shouldShowCandidateWindow = true
+        self.requestMixedLanguageCandidates()
+    }
+
+    private func cancelMixedLanguageRequest(clearCandidates: Bool) {
+        self.mixedLanguageTask?.cancel()
+        self.mixedLanguageTask = nil
+        self.mixedLanguageRevision += 1
+        if clearCandidates {
+            self.mixedLanguageCandidates = []
+            self.mixedLanguagePredictions = []
+        }
+    }
+
+    @MainActor
+    private func requestMixedLanguagePredictions() {
+        guard Config.MixedLanguageCandidates().value, Config.DebugPredictiveTyping().value,
+              self.composingText.isAtEndIndex, !self.composingText.isEmpty, self.lastInputStyle != .direct else {
+            return
+        }
+        let input = self.composingText
+        let revision = self.mixedLanguageRevision
+        self.mixedLanguageTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(150))
+                let learnedWords = MixedLanguageLearning.shared.words
+                let results = try await MixedLanguageCandidateGenerator.shared.predictions(for: input, learnedWords: learnedWords)
+                guard let self, !Task.isCancelled, self.mixedLanguageRevision == revision else {
+                    return
+                }
+                self.mixedLanguagePredictions = results
+                self.delegate?.candidatesDidChange()
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.appendDebugMessage("日英混在の予測候補を作成できませんでした: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @MainActor
+    private func requestMixedLanguageCandidates() {
+        guard Config.MixedLanguageCandidates().value,
+              self.didExperienceSegmentEdition || self.composingText.isAtEndIndex,
+              !self.composingText.isEmpty, self.lastInputStyle != .direct else {
+            return
+        }
+        let input = self.composingText.prefixToCursorPosition()
+        let isWholeInput = self.composingText.isAtEndIndex
+        let revision = self.mixedLanguageRevision
+        let learnedWords = MixedLanguageLearning.shared.words
+        self.mixedLanguageTask = Task { @MainActor [weak self] in
+            do {
+                var results = try await MixedLanguageCandidateGenerator.shared.candidates(for: input, learnedWords: learnedWords)
+                guard let self, !Task.isCancelled, self.mixedLanguageRevision == revision else {
+                    return
+                }
+                if !isWholeInput {
+                    // 切り出した打鍵数ではなく、元の読みの範囲だけを確定する。
+                    for index in results.indices {
+                        results[index].candidate.composingCount = .surfaceCount(input.convertTarget.count)
+                    }
+                }
+                let selected = self.selectedCandidate
+                let existing = Set(self.standardCandidates?.map(\.text) ?? [])
+                self.mixedLanguageCandidates = results.filter { !existing.contains($0.candidate.text) }
+                if let selected, let index = self.candidates?.firstIndex(of: selected) {
+                    self.selectionIndex = index
+                }
+                self.delegate?.candidatesDidChange()
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.appendDebugMessage("日英混在候補を作成できませんでした: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// - note: 画面更新との整合性を保つため、この関数の実行前に左文脈を取得し、これを引数として与える
     @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
+        let words = self.mixedLanguageWords(for: candidate)
+        if !words.isEmpty {
+            MixedLanguageLearning.shared.learn(words, enabled: Config.Learning().value != .nothing)
+            self.acceptedMixedLanguageWords.subtract(words)
+        }
         self.withConverter { $0.setCompletedData(candidate) }
         self.withConverter { $0.updateLearningData(candidate) }
         // カーソルを右端に移動する
@@ -633,7 +763,14 @@ public final class SegmentsManager {
                 forcedLeftSideContext: leftSideContext + candidate.text,
                 forcedRightSideContext: self.candidateRightSideContext ?? ""
             )
+            self.requestMixedLanguageCandidates()
         }
+    }
+
+    private func mixedLanguageWords(for candidate: Candidate) -> [String] {
+        let generated = self.mixedLanguageCandidates.first(where: { $0.candidate == candidate })?.englishWords ?? []
+        let accepted = self.acceptedMixedLanguageWords.filter { candidate.text.range(of: $0, options: .caseInsensitive) != nil }
+        return Array(Set(generated).union(accepted))
     }
 
     public enum CandidateWindow: Sendable {
@@ -915,7 +1052,8 @@ public final class SegmentsManager {
         predictionCandidates: [PredictionCandidate]
     ) -> [PredictionCandidate] {
         if !typoCorrectionCandidates.isEmpty {
-            return typoCorrectionCandidates
+            let existing = Set(typoCorrectionCandidates.map(\.displayText))
+            return typoCorrectionCandidates + predictionCandidates.filter { $0.isMixedLanguage && !existing.contains($0.displayText) }
         }
         return predictionCandidates
     }
@@ -932,28 +1070,20 @@ public final class SegmentsManager {
         guard Config.DebugPredictiveTyping().value, let rawCandidates else {
             return []
         }
-        return rawCandidates.predictionResults.compactMap {
+        let original = rawCandidates.predictionResults.compactMap {
             Self.makePredictionCandidate(currentTarget: self.composingText.convertTarget, candidate: $0)
         }
-    }
-
-    private func firstPredictionCandidate() -> Candidate? {
-        guard Config.DebugPredictiveTyping().value else {
-            return nil
+        guard Config.MixedLanguageCandidates().value else {
+            return original
         }
-
-        let target = self.composingText.convertTarget
-        guard !target.isEmpty else {
-            return nil
+        let existing = Set(original.map(\.displayText))
+        let mixed = self.mixedLanguagePredictions.filter { !existing.contains($0.candidate.text) }.prefix(2).map {
+            PredictionCandidate(
+                displayText: $0.candidate.text, appendText: $0.candidate.data.map(\.ruby).joined().toHiragana(),
+                deleteCount: self.composingText.convertTarget.count, sourceCandidate: $0.candidate, isMixedLanguage: true
+            )
         }
-
-        guard let rawCandidates else {
-            return nil
-        }
-
-        return rawCandidates.predictionResults.first {
-            Self.makePredictionCandidate(currentTarget: target, candidate: $0) != nil
-        }
+        return original + mixed
     }
 
     static func makePredictionCandidate(
@@ -992,14 +1122,23 @@ public final class SegmentsManager {
     public func acceptPredictionCandidate() {
         if let prediction = self.requestTypoCorrectionPredictionCandidates().first {
             self.acceptTypoCorrectionPredictionCandidate(prediction)
-        } else if let candidate = self.firstPredictionCandidate() {
-            self.acceptPredictionCandidate(candidate)
+        } else if let prediction = self.requestPredictionCandidates().first {
+            self.acceptPredictionCandidate(prediction)
         }
     }
 
     @MainActor
     public func acceptPredictionCandidate(_ prediction: PredictionCandidate) {
-        if let candidate = prediction.sourceCandidate {
+        if prediction.isMixedLanguage {
+            guard Config.MixedLanguageCandidates().value, Config.DebugPredictiveTyping().value,
+                  let mixed = self.mixedLanguagePredictions.first(where: { $0.candidate == prediction.sourceCandidate }) else { return }
+            self.composingText = mixed.input
+            self.withConverter { $0.acceptPredictionCandidate(mixed.candidate, composingText: &self.composingText) }
+            self.acceptedMixedLanguageWords.formUnion(mixed.englishWords)
+            self.lastOperation = .insert
+            self.shouldShowCandidateWindow = !self.liveConversionEnabled
+            self.updateRawCandidate()
+        } else if let candidate = prediction.sourceCandidate {
             self.acceptPredictionCandidate(candidate)
         } else if self.requestTypoCorrectionPredictionCandidates().contains(prediction) {
             self.acceptTypoCorrectionPredictionCandidate(prediction)
@@ -1218,6 +1357,11 @@ public final class SegmentsManager {
 public protocol SegmentManagerDelegate: AnyObject {
     func getLeftSideContext(maxCount: Int) -> String?
     func getRightSideContext(maxCount: Int) -> String?
+    @MainActor func candidatesDidChange()
+}
+
+public extension SegmentManagerDelegate {
+    @MainActor func candidatesDidChange() {}
 }
 
 private extension ComposingText {

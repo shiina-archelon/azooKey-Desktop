@@ -12,6 +12,7 @@
 - 未確定文字列を左右キーで移動し、途中の文字を修正できます（候補選択中を除く）。
 - ウィンドウを切り替えて戻っても、未確定入力を続けられます。複数のウィンドウで、それぞれの入力状態を保持します（[PR #22](https://github.com/shiina-archelon/azooKey-Desktop/pull/22)）。
 - 予測入力候補を複数表示して選択できます。選択キーを設定でき、Tabで選んだ候補を取り込んで未確定のまま入力を伸ばします（[PR #17](https://github.com/shiina-archelon/azooKey-Desktop/pull/17)）。
+- 設定の「日英混在候補を有効化（試用）」をONにすると、Spaceで英単語を英字で残した候補も選べます。予測候補の末尾にも最大2件追加し、入力途中の英単語を補完してTabで未確定のまま取り込めます。ローマ字・かな・カスタム入力に対応し、確定した英単語を学習します。候補選択中のCtrl + ⌫で学習解除できます（[issue #23](https://github.com/shiina-archelon/azooKey-Desktop/issues/23)）。辞書のライセンスは設定画面と[ThirdPartyLicenses](ThirdPartyLicenses/)から確認できます。
 
 独自機能を利用する場合は、`fork/main`ブランチをビルドしてください。以下のリリース版・Homebrewによるインストール案内は、本家の配布版についての説明です。
 

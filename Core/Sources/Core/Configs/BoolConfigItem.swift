@@ -20,6 +20,13 @@ extension BoolConfigItem {
 }
 
 extension Config {
+    /// 通常の変換候補に英字を残す候補を追加する設定
+    public struct MixedLanguageCandidates: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key = "jp.archelon-inc.inputmethod.azooKeyMac.preference.mixedLanguageCandidates"
+    }
+
     /// デバッグウィンドウにd/Dで遷移する設定
     public struct DebugWindow: BoolConfigItem {
         public init() {}
