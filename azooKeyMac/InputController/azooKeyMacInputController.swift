@@ -18,11 +18,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController
+    private var candidateCursorLocation: CGPoint = .zero
 
     private var predictionWindow: NSWindow
     private var predictionViewController: PredictionCandidatesViewController
     private var lastPredictionCandidates: [SegmentsManager.PredictionCandidate] = []
     private var lastPredictionUpdateTime: TimeInterval = 0
+    private var lastPredictionCursorLocation: CGPoint?
     private var predictionHideWorkItem: DispatchWorkItem?
 
     private var replaceSuggestionWindow: NSWindow
@@ -40,8 +42,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private var pinnedPromptsCache: [PromptHistoryItem] = []
 
     private static func makeCandidateWindow(contentViewController: NSViewController) -> NSWindow {
-        let window = NSWindow(contentViewController: contentViewController)
-        window.styleMask = [.borderless]
+        let window = CandidateWindow(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        window.contentViewController = contentViewController
+        window.becomesKeyOnlyIfNeeded = true
+        window.hidesOnDeactivate = false
         window.level = .popUpMenu
 
         // Chromium 系アプリの deadlock 回避のため、初期化時に client への
@@ -140,6 +144,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesViewController.delegate = self
         self.replaceSuggestionsViewController.delegate = self
         self.segmentsManager.delegate = self
+        self.candidatesViewController.candidateClicked = { @MainActor [weak self] row in
+            guard let self, self.candidatesWindow.isVisible else {
+                return
+            }
+            self.segmentsManager.requestSelectingRow(row)
+            self.candidateSubmitted()
+        }
+        self.predictionViewController.candidateClicked = { @MainActor [weak self] _ in
+            guard let self, self.inputState == .composing, self.predictionWindow.isVisible else {
+                return
+            }
+            self.acceptPredictionCandidate()
+            self.refreshMarkedText()
+            self.refreshCandidateWindow(useCachedPosition: true)
+            self.refreshPredictionWindow(useCachedPosition: true)
+        }
         self.setupMenu()
     }
 
@@ -585,10 +605,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     func refreshCandidateWindow() {
+        self.refreshCandidateWindow(useCachedPosition: false)
+    }
+
+    private func refreshCandidateWindow(useCachedPosition: Bool) {
         switch self.segmentsManager.getCurrentCandidateWindow(inputState: self.inputState) {
         case .selecting(let candidates, let selectionIndex):
             var rect: NSRect = .zero
-            self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+            if useCachedPosition {
+                rect.origin = self.candidateCursorLocation
+            } else {
+                self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+            }
+            self.candidateCursorLocation = rect.origin
             self.candidatesViewController.showCandidateIndex = true
             let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
             self.candidatesViewController.updateCandidatePresentations(
@@ -599,7 +628,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.candidatesWindow.orderFront(nil)
         case .composing(let candidates, let selectionIndex):
             var rect: NSRect = .zero
-            self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+            if useCachedPosition {
+                rect.origin = self.candidateCursorLocation
+            } else {
+                self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+            }
+            self.candidateCursorLocation = rect.origin
             self.candidatesViewController.showCandidateIndex = false
             let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
             self.candidatesViewController.updateCandidatePresentations(
@@ -615,7 +649,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
     }
 
-    func refreshPredictionWindow() {
+    func refreshPredictionWindow(useCachedPosition: Bool = false) {
         guard self.inputState == .composing else {
             self.hidePredictionWindow()
             return
@@ -626,7 +660,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
             if elapsed < 1.0, !self.lastPredictionCandidates.isEmpty {
-                self.showCachedPredictionWindow()
+                self.showCachedPredictionWindow(useCachedPosition: useCachedPosition)
                 self.schedulePredictionHide(after: max(0, 1.0 - elapsed))
                 return
             }
@@ -648,12 +682,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.lastPredictionCandidates = predictions
         self.lastPredictionUpdateTime = Date().timeIntervalSince1970
 
-        var rect: NSRect = .zero
-        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
             selectionIndex: nil,
-            cursorLocation: rect.origin
+            cursorLocation: self.predictionCursorLocation(useCached: useCachedPosition)
         )
 
         if Config.LiveConversion().value {
@@ -686,7 +718,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.setFrame(frame.cgRect, display: true)
     }
 
-    private func showCachedPredictionWindow() {
+    private func showCachedPredictionWindow(useCachedPosition: Bool) {
         let candidates = self.lastPredictionCandidates.map { prediction in
             Candidate(
                 text: prediction.displayText,
@@ -699,14 +731,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         guard !candidates.isEmpty else {
             return
         }
-        var rect: NSRect = .zero
-        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
             selectionIndex: nil,
-            cursorLocation: rect.origin
+            cursorLocation: self.predictionCursorLocation(useCached: useCachedPosition)
         )
         self.predictionWindow.orderFront(nil)
+    }
+
+    private func predictionCursorLocation(useCached: Bool) -> CGPoint {
+        if useCached, let location = self.lastPredictionCursorLocation {
+            return location
+        }
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.lastPredictionCursorLocation = rect.origin
+        return rect.origin
     }
 
     private func schedulePredictionHide(after delay: TimeInterval) {
@@ -729,6 +769,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.orderOut(nil)
         self.lastPredictionCandidates = []
         self.lastPredictionUpdateTime = 0
+        self.lastPredictionCursorLocation = nil
         self.predictionHideWorkItem?.cancel()
         self.predictionHideWorkItem = nil
         self.predictionViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
@@ -819,13 +860,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
 extension azooKeyMacInputController: CandidatesViewControllerDelegate {
     func candidateSubmitted() {
-        Task { @MainActor in
-            self.submitSelectedCandidate()
-            self.inputState = self.segmentsManager.isEmpty ? .none : .previewing
-            self.refreshMarkedText()
-            self.refreshCandidateWindow()
-            self.refreshPredictionWindow()
-        }
+        self.submitSelectedCandidate()
+        self.inputState = self.segmentsManager.isEmpty ? .none : .selecting
+        self.refreshMarkedText()
+        self.refreshCandidateWindow(useCachedPosition: true)
+        self.refreshPredictionWindow(useCachedPosition: true)
     }
 
     func candidateSelectionChanged(_ row: Int) {
