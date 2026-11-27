@@ -131,8 +131,8 @@ class CandidatesViewController: NumberedCandidatesViewController {
 }
 
 class PredictionCandidatesViewController: NumberedCandidatesViewController {
-    private let numberTabStop: CGFloat = 12
-    private let prefixTabStop: CGFloat = 24
+    private let numberTabStop: CGFloat = 16
+    private let candidateTabStop: CGFloat = 36
     private let prefixSymbolName = "arrow.forward.to.line.compact"
     private let prefixFontSize: CGFloat = 12
 
@@ -168,11 +168,6 @@ class PredictionCandidatesViewController: NumberedCandidatesViewController {
         let isSelected = currentSelectedRow == row
         let candidateColor = isSelected ? NSColor.white : NSColor.labelColor
 
-        if let numberPrefix = self.numberPrefix(forRow: row) {
-            attributedString.append(numberPrefix)
-        }
-        attributedString.append(NSAttributedString(string: "\t"))
-
         if let symbol = NSImage(systemSymbolName: prefixSymbolName, accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: prefixFontSize, weight: .regular)
             let configured = symbol.withSymbolConfiguration(config) ?? symbol
@@ -180,6 +175,10 @@ class PredictionCandidatesViewController: NumberedCandidatesViewController {
             attachment.image = configured
             attachment.bounds = NSRect(x: 0, y: -2, width: prefixFontSize + 2, height: prefixFontSize + 2)
             attributedString.append(NSAttributedString(attachment: attachment))
+        }
+        attributedString.append(NSAttributedString(string: "\t"))
+        if let numberPrefix = self.numberPrefix(forRow: row) {
+            attributedString.append(numberPrefix)
         }
         attributedString.append(NSAttributedString(string: "\t"))
         let candidateAttributed = NSAttributedString(
@@ -196,9 +195,9 @@ class PredictionCandidatesViewController: NumberedCandidatesViewController {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.tabStops = [
             NSTextTab(textAlignment: .left, location: numberTabStop, options: [:]),
-            NSTextTab(textAlignment: .left, location: numberTabStop + prefixTabStop, options: [:])
+            NSTextTab(textAlignment: .left, location: candidateTabStop, options: [:])
         ]
-        paragraphStyle.defaultTabInterval = prefixTabStop
+        paragraphStyle.defaultTabInterval = 24
         attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
 
         cell.candidateTextField.attributedStringValue = attributedString
@@ -207,7 +206,7 @@ class PredictionCandidatesViewController: NumberedCandidatesViewController {
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
         let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
-        return maxContentWidth + numberTabStop + prefixTabStop + 20 + (hasAnnotation ? 36 : 0)
+        return maxContentWidth + candidateTabStop + 20 + (hasAnnotation ? 36 : 0)
     }
 }
 
