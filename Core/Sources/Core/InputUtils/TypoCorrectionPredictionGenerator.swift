@@ -30,7 +30,7 @@ actor TypoCorrectionPredictionGenerator {
         onInitialCandidates: @MainActor @Sendable ([TypoCorrection]) -> Void
     ) async throws -> [TypoCorrection] {
         try Task.checkCancellation()
-        guard DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: modelDirectory) else {
+        guard DebugTypoCorrectionWeights.canReadRequiredWeightFiles(modelDirectoryURL: modelDirectory) else {
             return []
         }
         let languageModel = ExperimentalTypoCorrectionConfig.LanguageModel.ngram(

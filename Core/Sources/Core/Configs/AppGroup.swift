@@ -9,7 +9,7 @@ public enum AppGroup {
             ?? Self.containerURL(homeDirectoryURL: fileManager.homeDirectoryForCurrentUser)
     }
 
-    /// 既存バージョンと同じ共有コンテナを、App Group APIが利用できない環境でも参照する。
+    /// App Group APIが利用できない環境で参照する共有コンテナのURLを組み立てる。
     public static func containerURL(homeDirectoryURL: URL) -> URL {
         homeDirectoryURL
             .appendingPathComponent("Library", isDirectory: true)
