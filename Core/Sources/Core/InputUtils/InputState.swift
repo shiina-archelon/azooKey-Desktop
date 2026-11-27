@@ -10,6 +10,26 @@ public enum InputState: Sendable, Hashable {
     case replaceSuggestion
     case unicodeInput(String)
 
+    public func numberedCandidateAction(
+        for event: KeyEventCore,
+        conversionWindowVisible: Bool,
+        predictionWindowVisible: Bool
+    ) -> (ClientAction, ClientActionCallback)? {
+        guard event.modifierFlags == .control,
+              let key = event.charactersIgnoringModifiers, key.utf8.count == 1,
+              let number = Int(key), (1...9).contains(number) else {
+            return nil
+        }
+        switch self {
+        case .selecting where conversionWindowVisible:
+            return (.selectNumberCandidate(number), .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
+        case .composing where predictionWindowVisible:
+            return (.selectNumberCandidate(number), .fallthrough)
+        default:
+            return nil
+        }
+    }
+
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     public func event(  // swiftlint:disable:this function_parameter_count
@@ -328,12 +348,7 @@ public enum InputState: Sendable, Hashable {
                     return (.submitHalfWidthRomanCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .selecting))
                 }
             case .number(let num):
-                switch num {
-                case .one, .two, .three, .four, .five, .six, .seven, .eight, .nine:
-                    return (.selectNumberCandidate(num.intValue), .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
-                case .zero, .shiftZero:
-                    return (.commitMarkedTextAndAppendPieceToMarkedText([num.inputPiece]), .transition(.composing))
-                }
+                return (.commitMarkedTextAndAppendPieceToMarkedText([num.inputPiece]), .transition(.composing))
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
             case .forget:

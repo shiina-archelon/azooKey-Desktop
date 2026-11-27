@@ -73,4 +73,22 @@ final class PredictionCandidateNavigationTests: XCTestCase {
         controller.updateCandidatePresentations(candidates, selectionIndex: nil, cursorLocation: .zero)
         XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補1")
     }
+
+    func testPredictionNumbersFollowTheDisplayedRowsAndResetWithTheList() {
+        let controller = PredictionCandidatesViewController()
+        _ = controller.view
+        controller.updateCandidatePresentations(self.presentations((1...12).map { "候補\($0)" }), selectionIndex: nil, cursorLocation: .zero)
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 0)
+        XCTAssertEqual(controller.getNumberCandidate(num: 9), 8)
+
+        XCTAssertTrue(controller.handleNavigation(self.event(126, modifiers: []), selectionKeys: .arrows))
+        XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補12")
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 3)
+        XCTAssertEqual(controller.getNumberCandidate(num: 9), 11)
+        XCTAssertNil(controller.getNumberCandidate(num: 0))
+
+        controller.updateCandidatePresentations(self.presentations(["新しい候補"]), selectionIndex: nil, cursorLocation: .zero)
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 0)
+        XCTAssertNil(controller.getNumberCandidate(num: 2))
+    }
 }

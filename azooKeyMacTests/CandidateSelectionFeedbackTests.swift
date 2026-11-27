@@ -18,6 +18,7 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
 
     func testPageNavigationMovesNineCandidatesAndUpdatesNumberShortcuts() {
         let controller = CandidatesViewController()
+        controller.showCandidateIndex = true
         _ = controller.view
         controller.updateCandidatePresentations(
             (1...21).map {
@@ -39,6 +40,7 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
 
     func testPageNavigationStopsAtTheFirstAndLastCandidates() {
         let controller = CandidatesViewController()
+        controller.showCandidateIndex = true
         _ = controller.view
         controller.updateCandidatePresentations(
             (1...12).map {
@@ -56,6 +58,21 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
         XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補12")
         XCTAssertEqual(controller.getNumberCandidate(num: 1), 3)
         XCTAssertEqual(controller.getNumberCandidate(num: 9), 11)
+    }
+
+    func testOnlyDisplayedConversionCandidateNumbersResolve() {
+        let controller = CandidatesViewController()
+        _ = controller.view
+        let candidates = ["一", "二"].map {
+            CandidatePresentation(candidate: Candidate(text: $0, value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: []))
+        }
+        controller.updateCandidatePresentations(candidates, selectionIndex: 0, cursorLocation: .zero)
+        XCTAssertNil(controller.getNumberCandidate(num: 1))
+
+        controller.showCandidateIndex = true
+        controller.updateCandidatePresentations(candidates, selectionIndex: 0, cursorLocation: .zero)
+        XCTAssertEqual(controller.getNumberCandidate(num: 2), 1)
+        XCTAssertNil(controller.getNumberCandidate(num: 3))
     }
 
     func testRenderingSelectionDoesNotNotifySelectionDelegate() {
