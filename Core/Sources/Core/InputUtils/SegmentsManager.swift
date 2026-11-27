@@ -498,7 +498,9 @@ public final class SegmentsManager {
         var seen = Set((self.rawCandidatesList ?? []).map(\.text))
         let composingCount = ComposingCount.surfaceCount(length)
         let mixedCorrections = Config.MixedLanguageCandidates().value ? self.mixedLanguageTypoCorrections : []
-        let corrections = self.typoCorrections.prefix(3) + mixedCorrections + self.typoCorrections.dropFirst(3)
+        var corrections = Array(self.typoCorrections.prefix(3))
+        corrections.append(contentsOf: mixedCorrections)
+        corrections.append(contentsOf: self.typoCorrections.dropFirst(3))
         return corrections.compactMap { correction in
             guard seen.insert(correction.candidate.text).inserted else {
                 return nil
