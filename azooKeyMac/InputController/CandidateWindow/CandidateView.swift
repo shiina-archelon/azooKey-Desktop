@@ -7,13 +7,27 @@ import KanaKanjiConverterModule
     func candidateSelectionChanged(_ row: Int)
 }
 
-class CandidatesViewController: BaseCandidateViewController {
-    weak var delegate: (any CandidatesViewControllerDelegate)?
-    private var showedRows: ClosedRange = 0...8
-    var showCandidateIndex = false
+class NumberedCandidatesViewController: BaseCandidateViewController {
+    private static let maximumNumberedRows = 9
+    fileprivate(set) var firstNumberedRow = 0
+    var showsCandidateNumbers: Bool { true }
+
+    override var numberOfVisibleRows: Int {
+        min(Self.maximumNumberedRows, self.tableView.numberOfRows)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        if let scrollView = self.tableView.enclosingScrollView {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(renumberAfterScrolling), name: NSScrollView.didLiveScrollNotification, object: scrollView
+            )
+        }
+    }
 
     override func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
-        self.showedRows = selectionIndex == nil ? 0...8 : self.showedRows
+        let lastPageStart = max(0, candidates.count - Self.maximumNumberedRows)
+        self.firstNumberedRow = selectionIndex == nil ? 0 : min(self.firstNumberedRow, lastPageStart)
         super.updateCandidatePresentations(
             candidates,
             selectionIndex: selectionIndex,
@@ -22,51 +36,66 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override internal func updateSelectionCallback(_ row: Int, notifySelectionChange: Bool) {
-        if notifySelectionChange {
-            delegate?.candidateSelectionChanged(row)
+        if row < self.firstNumberedRow {
+            self.firstNumberedRow = row
+        } else if row >= self.firstNumberedRow + Self.maximumNumberedRows {
+            self.firstNumberedRow = row - Self.maximumNumberedRows + 1
         }
+    }
 
-        if !self.showedRows.contains(row) {
-            if row < self.showedRows.lowerBound {
-                self.showedRows = row...(row + 8)
-            } else {
-                self.showedRows = (row - 8)...row
-            }
+    @objc private func renumberAfterScrolling() {
+        let rows = self.tableView.rows(in: self.tableView.visibleRect)
+        guard self.showsCandidateNumbers, rows.length > 0 else {
+            return
+        }
+        let lastPageStart = max(0, self.candidates.count - Self.maximumNumberedRows)
+        self.firstNumberedRow = min(rows.location, lastPageStart)
+        self.updateVisibleRows()
+    }
+
+    func getNumberCandidate(num: Int) -> Int? {
+        guard self.showsCandidateNumbers, (1...Self.maximumNumberedRows).contains(num) else {
+            return nil
+        }
+        let row = self.firstNumberedRow + num - 1
+        return self.candidates.indices.contains(row) ? row : nil
+    }
+
+    fileprivate func numberPrefix(forRow row: Int) -> NSAttributedString? {
+        let number = row - self.firstNumberedRow + 1
+        guard self.getNumberCandidate(num: number) == row else {
+            return nil
+        }
+        return NSAttributedString(string: "\(number).", attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .regular),
+            .foregroundColor: self.currentSelectedRow == row ? NSColor.white : NSColor.secondaryLabelColor,
+            .baselineOffset: 2
+        ])
+    }
+}
+
+class CandidatesViewController: NumberedCandidatesViewController {
+    weak var delegate: (any CandidatesViewControllerDelegate)?
+    var showCandidateIndex = false
+    override var showsCandidateNumbers: Bool { self.showCandidateIndex }
+
+    override internal func updateSelectionCallback(_ row: Int, notifySelectionChange: Bool) {
+        super.updateSelectionCallback(row, notifySelectionChange: notifySelectionChange)
+        if notifySelectionChange {
+            self.delegate?.candidateSelectionChanged(row)
         }
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        let candidate = self.candidates[row].candidate
-        let annotationText = self.candidates[row].displayContext.annotationText
-        let isWithinShowedRows = self.showedRows.contains(row)
-        let displayIndex = row - self.showedRows.lowerBound + 1 // showedRowsの下限からの相対的な位置
-        let displayText: String
-
-        if isWithinShowedRows && self.showCandidateIndex {
-            if displayIndex > 9 {
-                displayText = " " + candidate.text // 行番号が10以上の場合、インデントを調整
-            } else {
-                displayText = "\(displayIndex). " + candidate.text
-            }
-        } else {
-            displayText = candidate.text // showedRowsの範囲外では番号を付けない
+        let presentation = self.candidates[row]
+        let text = NSMutableAttributedString()
+        if let numberPrefix = self.numberPrefix(forRow: row) {
+            text.append(numberPrefix)
+            text.append(NSAttributedString(string: " "))
         }
-
-        // 数字部分と候補部分を別々に設定
-        let attributedString = NSMutableAttributedString(string: displayText)
-        let numberRange = (displayText as NSString).range(of: "\(displayIndex).")
-
-        if numberRange.location != NSNotFound {
-            attributedString.addAttributes([
-                .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .regular),
-                .foregroundColor: currentSelectedRow == row ? NSColor.white : NSColor.gray,
-                .baselineOffset: 2
-            ], range: numberRange)
-        }
-
-        cell.candidateTextField.attributedStringValue = attributedString
-
-        cell.updateAnnotation(annotationText, selected: currentSelectedRow == row)
+        text.append(NSAttributedString(string: presentation.candidate.text))
+        cell.candidateTextField.attributedStringValue = text
+        cell.updateAnnotation(presentation.displayContext.annotationText, selected: self.currentSelectedRow == row)
     }
 
     func selectCandidatePage(_ count: Int) -> Int? {
@@ -78,26 +107,17 @@ class CandidatesViewController: BaseCandidateViewController {
         guard row != self.currentSelectedRow else {
             return row
         }
-        let firstRow = min(max(0, self.showedRows.lowerBound + count * pageSize), self.candidates.count - pageSize)
-        self.showedRows = firstRow...(firstRow + pageSize - 1)
-        self.tableView.scrollRowToVisible(self.showedRows.upperBound)
-        self.tableView.scrollRowToVisible(self.showedRows.lowerBound)
+        let firstRow = min(max(0, self.firstNumberedRow + count * pageSize), self.candidates.count - pageSize)
+        self.firstNumberedRow = firstRow
+        self.tableView.scrollRowToVisible(firstRow + pageSize - 1)
+        self.tableView.scrollRowToVisible(firstRow)
         self.updateSelection(to: row, notifySelectionChange: false)
         return row
     }
 
-    func getNumberCandidate(num: Int) -> Int {
-        let nextRow = self.showedRows.lowerBound + num - 1
-        return nextRow
-    }
-
     func hide() {
         self.currentSelectedRow = -1
-        self.showedRows = 0...8
-    }
-
-    override var numberOfVisibleRows: Int {
-        min(9, self.tableView.numberOfRows)
+        self.firstNumberedRow = 0
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
@@ -110,8 +130,9 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 }
 
-class PredictionCandidatesViewController: BaseCandidateViewController {
-    private let prefixTabStop: CGFloat = 24
+class PredictionCandidatesViewController: NumberedCandidatesViewController {
+    private let numberTabStop: CGFloat = 16
+    private let candidateTabStop: CGFloat = 29
     private let prefixSymbolName = "arrow.forward.to.line.compact"
     private let prefixFontSize: CGFloat = 12
 
@@ -140,10 +161,6 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
         return true
     }
 
-    override var numberOfVisibleRows: Int {
-        min(9, self.tableView.numberOfRows)
-    }
-
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
         let candidateText = candidates[row].candidate.text
         let attributedString = NSMutableAttributedString()
@@ -160,6 +177,10 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
             attributedString.append(NSAttributedString(attachment: attachment))
         }
         attributedString.append(NSAttributedString(string: "\t"))
+        if let numberPrefix = self.numberPrefix(forRow: row) {
+            attributedString.append(numberPrefix)
+        }
+        attributedString.append(NSAttributedString(string: "\t"))
         let candidateAttributed = NSAttributedString(
             string: candidateText,
             attributes: [
@@ -173,9 +194,10 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
 
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.tabStops = [
-            NSTextTab(textAlignment: .left, location: prefixTabStop, options: [:])
+            NSTextTab(textAlignment: .left, location: numberTabStop, options: [:]),
+            NSTextTab(textAlignment: .left, location: candidateTabStop, options: [:])
         ]
-        paragraphStyle.defaultTabInterval = prefixTabStop
+        paragraphStyle.defaultTabInterval = 24
         attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
 
         cell.candidateTextField.attributedStringValue = attributedString
@@ -184,7 +206,7 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
         let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
-        return maxContentWidth + prefixTabStop + 20 + (hasAnnotation ? 36 : 0)
+        return maxContentWidth + candidateTabStop + 20 + (hasAnnotation ? 36 : 0)
     }
 }
 

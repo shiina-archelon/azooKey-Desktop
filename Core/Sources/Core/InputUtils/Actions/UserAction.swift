@@ -270,8 +270,6 @@ public enum UserAction {
             // Numpadでそれぞれ「入力先頭にカーソルを移動」「入力末尾にカーソルを移動」「順方向削除」「入力全消し（より強いエスケープ）」に対応するが、サポート外の動作として明示的に無効化
             return .unknown
         case 18, 19, 20, 21, 23, 22, 26, 28, 25, 29:
-            // Control+数字はアプリやOS側のショートカットとして使われるため、数字入力としない
-            // keyCode分岐に入る前に.unknownとして処理されるが、念のためここでも明示的に扱う
             if eventCore.modifierFlags.isDisjoint(with: [.shift, .option, .control]) {
                 let number: UserAction.Number = [
                     18: .one,

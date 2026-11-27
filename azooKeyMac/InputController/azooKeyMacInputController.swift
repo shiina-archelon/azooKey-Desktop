@@ -288,9 +288,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return false
         }
 
+        let eventCore = event.keyEventCore
+        if let (action, callback) = self.inputState.numberedCandidateAction(
+            for: eventCore,
+            conversionWindowVisible: self.candidatesWindow.isVisible,
+            predictionWindowVisible: self.predictionWindow.isVisible
+        ) {
+            return self.handleClientAction(action, clientActionCallback: callback, client: client)
+        }
+
         if self.inputState == .composing, self.predictionWindow.isVisible,
            event.keyCode == 125 || event.keyCode == 126,
-           self.predictionViewController.handleNavigation(event.keyEventCore, selectionKeys: Config.PredictionCandidateSelectionKeys().value) {
+           self.predictionViewController.handleNavigation(eventCore, selectionKeys: Config.PredictionCandidateSelectionKeys().value) {
             return true
         }
 
@@ -323,7 +332,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return true
         }
 
-        let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
+        let userAction = UserAction.getUserAction(eventCore: eventCore, inputLanguage: inputLanguage)
 
         // 英数キー（keyCode 102）の処理
         if event.keyCode == 102 {
@@ -386,7 +395,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let (clientAction, clientActionCallback) = inputState.event(
-            eventCore: event.keyEventCore,
+            eventCore: eventCore,
             userAction: userAction,
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
@@ -468,15 +477,25 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .selectNextCandidate:
             self.segmentsManager.requestSelectingNextCandidate()
         case .selectCandidatePage(let count):
-            if count < 0, self.candidatesViewController.getNumberCandidate(num: 1) == 0 {
+            if count < 0, self.candidatesViewController.firstNumberedRow == 0 {
                 self.segmentsManager.requestSelectingAdditionalCandidates()
             } else if let row = self.candidatesViewController.selectCandidatePage(count) {
                 self.segmentsManager.requestSelectingRow(row)
             }
         case .selectNumberCandidate(let num):
-            self.segmentsManager.requestSelectingRow(self.candidatesViewController.getNumberCandidate(num: num))
-            self.submitSelectedCandidate()
-            self.segmentsManager.requestResettingSelection()
+            if self.inputState == .composing {
+                guard let row = self.predictionViewController.getNumberCandidate(num: num) else {
+                    return true
+                }
+                self.predictionViewController.updateSelection(to: row, notifySelectionChange: false)
+                self.acceptPredictionCandidate()
+            } else {
+                guard let row = self.candidatesViewController.getNumberCandidate(num: num) else {
+                    return true
+                }
+                self.segmentsManager.requestSelectingRow(row)
+                self.submitSelectedCandidate()
+            }
         case .submitHiraganaCandidate:
             self.submitCandidate(self.segmentsManager.getModifiedRubyCandidate(inputState: self.inputState) {
                 $0.toHiragana()

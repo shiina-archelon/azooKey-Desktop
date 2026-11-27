@@ -173,6 +173,68 @@ private func makeControlEvent(
     }
 }
 
+@Test func testControlNumberSelectsFromTheVisibleCandidateWindow() throws {
+    let event = makeControlEvent(logicalKey: "2", characters: nil, modifiers: [.control], keyCode: 19)
+
+    let (prediction, predictionCallback) = try #require(InputState.composing.numberedCandidateAction(
+        for: event, conversionWindowVisible: true, predictionWindowVisible: true
+    ))
+    guard case .selectNumberCandidate(2) = prediction, case .fallthrough = predictionCallback else {
+        Issue.record("予測候補の2番を未確定のまま取り込む")
+        return
+    }
+
+    let (conversion, conversionCallback) = try #require(InputState.selecting.numberedCandidateAction(
+        for: event, conversionWindowVisible: true, predictionWindowVisible: false
+    ))
+    guard case .selectNumberCandidate(2) = conversion,
+          case .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing) = conversionCallback else {
+        Issue.record("変換候補の2番を確定する")
+        return
+    }
+
+    #expect(InputState.composing.numberedCandidateAction(
+        for: event, conversionWindowVisible: true, predictionWindowVisible: false
+    ) == nil)
+    #expect(InputState.selecting.numberedCandidateAction(
+        for: event, conversionWindowVisible: false, predictionWindowVisible: false
+    ) == nil)
+    #expect(InputState.none.numberedCandidateAction(
+        for: event, conversionWindowVisible: false, predictionWindowVisible: false
+    ) == nil)
+}
+
+@Test func testOnlyControlAndDigitsOneThroughNineSelectNumberedCandidates() {
+    let cases: [(String, KeyEventCore.ModifierFlag)] = [
+        ("2", []), ("2", [.control, .shift]), ("2", [.control, .option]),
+        ("2", [.control, .command]), ("0", [.control]), ("x", [.control])
+    ]
+    for (key, modifiers) in cases {
+        let event = makeControlEvent(logicalKey: key, characters: key, modifiers: modifiers, keyCode: 19)
+        for state: InputState in [.composing, .selecting] {
+            #expect(state.numberedCandidateAction(for: event, conversionWindowVisible: true, predictionWindowVisible: true) == nil)
+        }
+    }
+}
+
+@Test func testBareDigitStartsNumericInputWhileSelectingConversionCandidates() {
+    let event = makeControlEvent(logicalKey: "2", characters: "2", modifiers: [], keyCode: 19)
+    let (action, callback) = InputState.selecting.event(
+        eventCore: event,
+        userAction: UserAction.getUserAction(eventCore: event, inputLanguage: .japanese),
+        inputLanguage: .japanese,
+        liveConversionEnabled: false,
+        enableDebugWindow: false,
+        enableSuggestion: false
+    )
+    guard case .commitMarkedTextAndAppendPieceToMarkedText(let pieces) = action,
+          case .transition(.composing) = callback else {
+        Issue.record("修飾なしの数字は数字入力として扱う")
+        return
+    }
+    #expect(pieces.inputString(preferIntention: true) == "2")
+}
+
 @Test func testUnknownActionsFallThroughToHostApplication() {
     let controlBackquoteEvent = makeControlEvent(
         logicalKey: "`",
