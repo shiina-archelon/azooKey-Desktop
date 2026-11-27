@@ -6,6 +6,7 @@ struct MixedLanguageCandidate: Sendable {
     let input: ComposingText
     let englishWords: [String]
     let preferred: Bool
+    let preservesAcronym: Bool
 }
 
 /// 入力処理と別の実行コンテキストで、専用の変換器と辞書を保持する。
@@ -24,6 +25,7 @@ actor MixedLanguageCandidateGenerator {
         let learnedCount: Int
         let plausibleWords: Bool
         let hasLongWord: Bool
+        let acronymCount: Int
         let index: Int
     }
 
@@ -32,6 +34,10 @@ actor MixedLanguageCandidateGenerator {
     }
 
     func predictions(for input: ComposingText, learnedWords: Set<String>) throws -> [MixedLanguageCandidate] {
+        try Task.checkCancellation()
+        if let acronym = self.explicitAcronymPrediction(for: input, lexicon: try self.loadLexicon(), learnedWords: learnedWords) {
+            return [acronym]
+        }
         let interpretations = try self.generate(for: input, learnedWords: learnedWords, completingWords: true).filter(\.preferred)
         var predictions: [MixedLanguageCandidate] = []
         var seen: Set<String> = []
@@ -40,7 +46,7 @@ actor MixedLanguageCandidateGenerator {
             let target = mixed.input.convertTarget.toHiragana()
             let ruby = mixed.candidate.data.map(\.ruby).joined().toHiragana()
             let candidates: [Candidate]
-            if ruby.hasPrefix(target), ruby.count > target.count {
+            if mixed.preservesAcronym || (ruby.hasPrefix(target) && ruby.count > target.count) {
                 candidates = [mixed.candidate]
             } else {
                 let result = self.converter.requestCandidates(mixed.input, options: self.options(nBest: 10, predicting: true))
@@ -52,7 +58,10 @@ actor MixedLanguageCandidateGenerator {
                 candidates = continuations.isEmpty ? [mixed.candidate] : continuations
             }
             for candidate in candidates where seen.insert(candidate.text).inserted {
-                predictions.append(.init(candidate: candidate, input: mixed.input, englishWords: mixed.englishWords, preferred: true))
+                predictions.append(.init(
+                    candidate: candidate, input: mixed.input, englishWords: mixed.englishWords,
+                    preferred: true, preservesAcronym: mixed.preservesAcronym
+                ))
                 if predictions.count == 2 {
                     return predictions
                 }
@@ -63,23 +72,18 @@ actor MixedLanguageCandidateGenerator {
 
     private func generate(for input: ComposingText, learnedWords: Set<String>, completingWords: Bool) throws -> [MixedLanguageCandidate] {
         try Task.checkCancellation()
-        if self.lexicon == nil {
-            self.lexicon = try MixedLanguageLexicon()
-        }
+        let lexicon = try self.loadLexicon()
         // 文字を表示しない区切りは、英単語の探索に含めない。
-        let searchableIndices = input.input.indices.filter {
-            input.input[$0].piece != .compositionSeparator
+        let keys = input.input.enumerated().compactMap { index, element in
+            Self.rawCharacter(of: element.piece).map { (index: index, character: $0) }
         }
-        let characters = searchableIndices.map { index -> Character in
-            switch input.input[index].piece {
-            case .character(let character), .key(_, let character, _): character
-            case .compositionSeparator: "\0"
-            }
-        }
+        let searchableIndices = keys.map(\.index)
+        let characters = keys.map(\.character)
+        let rawCharacters = characters.map(Optional.some)
         let variants = completingWords
-            ? self.lexicon?.predictionVariants(for: characters, learnedWords: learnedWords)
-            : self.lexicon?.variants(for: characters, learnedWords: learnedWords)
-        guard let variants, !variants.isEmpty else {
+            ? lexicon.predictionVariants(for: characters, learnedWords: learnedWords)
+            : lexicon.variants(for: characters, learnedWords: learnedWords)
+        guard !variants.isEmpty else {
             return []
         }
         let options = self.options(nBest: 10, predicting: false)
@@ -108,22 +112,86 @@ actor MixedLanguageCandidateGenerator {
                 scoreCache[scoringInput.convertTarget] = score
             }
             let words = Self.englishWords(spans: spans, input: input)
+            let acronymCount = variant.allSatisfy {
+                Self.isExplicitAcronym($0, in: characters)
+                    && lexicon.technicalWord(containing: $0.range, in: rawCharacters, learnedWords: learnedWords) == $0.range
+            } ? variant.count : 0
             readings.append(.init(
                 input: mixed, typedInput: completingWords ? Self.replacing(input, spans: spans, replacement: .typed) : mixed,
                 score: score, words: words,
                 learnedCount: words.filter { learnedWords.contains($0.lowercased()) }.count,
                 plausibleWords: spans.allSatisfy { $0.text.count > 1 || $0.text == $0.text.uppercased() },
                 hasLongWord: spans.contains { $0.text.count >= 3 },
+                acronymCount: acronymCount,
                 index: index
             ))
         }
         readings.sort {
+            if $0.acronymCount != $1.acronymCount {
+                return $0.acronymCount > $1.acronymCount
+            }
             if $0.learnedCount != $1.learnedCount {
                 return $0.learnedCount > $1.learnedCount
             }
             return $0.score == $1.score ? $0.index < $1.index : $0.score > $1.score
         }
         return try self.converting(readings, inputCount: input.input.count, baseline: baseline)
+    }
+
+    private func loadLexicon() throws -> MixedLanguageLexicon {
+        if let lexicon = self.lexicon {
+            return lexicon
+        }
+        let lexicon = try MixedLanguageLexicon()
+        self.lexicon = lexicon
+        return lexicon
+    }
+
+    private func explicitAcronymPrediction(
+        for input: ComposingText,
+        lexicon: MixedLanguageLexicon,
+        learnedWords: Set<String>
+    ) -> MixedLanguageCandidate? {
+        let characters = input.input.map { Self.rawCharacter(of: $0.piece) }
+        var spans: [MixedLanguageLexicon.Span] = []
+        var index = 0
+        while index < characters.count {
+            let start = index
+            var word = ""
+            while index < characters.count, let character = characters[index], character.isASCII, character.isUppercase {
+                word.append(character)
+                index += 1
+            }
+            if index == start {
+                index += 1
+                continue
+            }
+            if word.count >= 2, lexicon.words.contains(word.lowercased()) || learnedWords.contains(word.lowercased()) {
+                let range = lexicon.technicalWord(containing: start..<index, in: characters, learnedWords: learnedWords)
+                if spans.last.map({ $0.range.upperBound <= range.lowerBound }) ?? true {
+                    spans.append(.init(range: range, text: String(characters[range].compactMap { $0 }), score: 0))
+                    index = range.upperBound
+                }
+            }
+        }
+        guard !spans.isEmpty else {
+            return nil
+        }
+        let mixed = Self.replacing(input, spans: spans, replacement: .typed)
+        guard mixed.convertTarget != input.convertTarget,
+              var candidate = self.fullCandidates(for: mixed, options: self.options(nBest: 10, predicting: false)).first else { return nil }
+        candidate.composingCount = .inputCount(input.input.count)
+        return .init(
+            candidate: candidate, input: mixed, englishWords: spans.map(\.text),
+            preferred: true, preservesAcronym: true
+        )
+    }
+
+    private static func rawCharacter(of piece: InputPiece) -> Character? {
+        switch piece {
+        case .character(let character), .key(_, let character, _): character
+        case .compositionSeparator: nil
+        }
     }
 
     private func converting(_ readings: [Reading], inputCount: Int, baseline: Double) throws -> [MixedLanguageCandidate] {
@@ -144,16 +212,27 @@ actor MixedLanguageCandidateGenerator {
                 candidate: candidate,
                 input: reading.typedInput,
                 englishWords: reading.words,
-                preferred: reading.learnedCount > 0 || (reading.plausibleWords && reading.score >= baseline + margin)
+                preferred: reading.acronymCount > 0 || reading.learnedCount > 0 || (reading.plausibleWords && reading.score >= baseline + margin),
+                preservesAcronym: reading.acronymCount > 0
             ), reading.score))
         }
-        let bestScore = results.filter { $0.result.preferred }.map(\.score).max() ?? -.infinity
+        let bestScore = results.filter { $0.result.preferred && !$0.result.preservesAcronym }.map(\.score).max() ?? -.infinity
         return results.map { result, score in
             .init(
                 candidate: result.candidate, input: result.input, englishWords: result.englishWords,
-                preferred: result.preferred && score >= bestScore - 6
+                preferred: result.preferred && (result.preservesAcronym || score >= bestScore - 6),
+                preservesAcronym: result.preservesAcronym
             )
         }
+    }
+
+    private static func isExplicitAcronym(_ span: MixedLanguageLexicon.Span, in characters: [Character]) -> Bool {
+        guard span.range.count > 1, span.range.count == span.text.count,
+              span.text.allSatisfy({ $0.isASCII && $0.isUppercase }) else { return false }
+        let start = span.range.lowerBound
+        let end = span.range.upperBound
+        return (start == 0 || !characters[start - 1].isUppercase)
+            && (end == characters.count || !characters[end].isUppercase)
     }
 
     private func options(nBest: Int, predicting: Bool) -> ConvertRequestOptions {

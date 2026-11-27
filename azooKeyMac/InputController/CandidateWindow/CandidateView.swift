@@ -66,20 +66,7 @@ class CandidatesViewController: BaseCandidateViewController {
 
         cell.candidateTextField.attributedStringValue = attributedString
 
-        if let annotationText {
-            let annotationString = NSAttributedString(
-                string: annotationText,
-                attributes: [
-                    .font: NSFont.systemFont(ofSize: 12),
-                    .foregroundColor: currentSelectedRow == row ? NSColor.white : NSColor.systemGray
-                ]
-            )
-            cell.showCandidateAnnotationTextField(true)
-            cell.candidateAnnotationTextField.attributedStringValue = annotationString
-        } else {
-            cell.showCandidateAnnotationTextField(false)
-            cell.candidateAnnotationTextField.stringValue = ""
-        }
+        cell.updateAnnotation(annotationText, selected: currentSelectedRow == row)
     }
 
     func selectCandidatePage(_ count: Int) -> Int? {
@@ -192,9 +179,24 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
         attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
 
         cell.candidateTextField.attributedStringValue = attributedString
+        cell.updateAnnotation(candidates[row].displayContext.annotationText, selected: isSelected)
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
-        maxContentWidth + prefixTabStop + 20
+        let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
+        return maxContentWidth + prefixTabStop + 20 + (hasAnnotation ? 36 : 0)
+    }
+}
+
+private extension CandidateTableCellView {
+    func updateAnnotation(_ annotation: String?, selected: Bool) {
+        self.showCandidateAnnotationTextField(annotation != nil)
+        self.candidateAnnotationTextField.attributedStringValue = NSAttributedString(
+            string: annotation ?? "",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 12),
+                .foregroundColor: selected ? NSColor.white : NSColor.systemGray
+            ]
+        )
     }
 }

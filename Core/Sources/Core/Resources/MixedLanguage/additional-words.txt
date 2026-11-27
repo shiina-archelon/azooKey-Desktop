@@ -1,6 +1,7 @@
 iPhone
 Mac
 OpenAI
+AI
 ChatGPT
 Codex
 Claude

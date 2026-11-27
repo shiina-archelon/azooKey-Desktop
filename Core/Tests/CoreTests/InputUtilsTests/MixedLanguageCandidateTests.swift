@@ -313,6 +313,35 @@ struct MixedLanguageCandidateTests {
     }
 
     @MainActor
+    @Test func offersAnUppercaseAcronymInsideCustomJapaneseInput() async throws {
+        let previous = Config.MixedLanguageCandidates().value
+        let previousPrediction = Config.DebugPredictiveTyping().value
+        defer {
+            Config.MixedLanguageCandidates().value = previous
+            Config.DebugPredictiveTyping().value = previousPrediction
+        }
+        Config.MixedLanguageCandidates().value = true
+        Config.DebugPredictiveTyping().value = true
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".tsv")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try "b\tこ\n；\tれ\nm\tも\nA\tち\nI\tに\n1\tぬ\ng\tき\nw\tて\n「\t゛\nて「\tで\n"
+            .write(to: url, atomically: true, encoding: .utf8)
+        let name = "mixed-language-acronym-tests-\(UUID().uuidString)"
+        InputStyleManager.registerInputStyle(table: try InputStyleManager.loadTable(from: url), for: name)
+        let manager = try self.manager()
+        await self.changeCandidates(manager, delegate: MixedLanguageDelegate()) {
+            manager.insertAtCursorPosition("b；mAI1gw「", inputStyle: .mapped(id: .tableName(name)))
+        }
+        #expect(manager.convertTarget == "これもちにぬきで")
+        let prediction = try #require(manager.requestPredictionCandidates().first {
+            $0.isMixedLanguage && $0.displayText == "これもAI抜きで"
+        })
+        manager.acceptPredictionCandidate(prediction)
+        #expect(manager.convertTarget == "これもAIぬきで")
+        #expect(!manager.isEmpty)
+    }
+
+    @MainActor
     @Test func discardsMixedPredictionsWhenTheInputIsReplaced() async throws {
         let previous = Config.MixedLanguageCandidates().value
         let previousPrediction = Config.DebugPredictiveTyping().value
