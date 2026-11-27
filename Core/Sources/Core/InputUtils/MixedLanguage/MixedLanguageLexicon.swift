@@ -66,6 +66,26 @@ struct MixedLanguageLexicon {
         let score: Int
     }
 
+    func technicalWord(containing acronym: Range<Int>, in characters: [Character?], learnedWords: Set<String>) -> Range<Int> {
+        let limit = max(self.maximumLength, learnedWords.map(\.count).max() ?? 0)
+        let firstStart = max(0, acronym.upperBound - limit)
+        var longest = acronym
+        for start in firstStart...acronym.lowerBound {
+            var word = ""
+            for end in start..<min(characters.count, start + limit) {
+                guard let character = characters[end],
+                      let byte = String(character).lowercased().utf8.first,
+                      character.isASCII, Self.isWordByte(byte) else { break }
+                word.append(contentsOf: character.lowercased())
+                if end + 1 >= acronym.upperBound, word.count > longest.count,
+                   self.technicalWords.contains(word) || learnedWords.contains(word) {
+                    longest = start..<(end + 1)
+                }
+            }
+        }
+        return longest
+    }
+
     private struct Completion {
         let span: Span
         let learned: Bool

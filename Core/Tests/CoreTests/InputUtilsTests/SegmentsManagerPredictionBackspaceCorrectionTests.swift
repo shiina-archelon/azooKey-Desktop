@@ -38,10 +38,16 @@ import Testing
 
     let candidates = SegmentsManager.preferredPredictionCandidates(
         typoCorrectionCandidates: [typoCorrection],
-        predictionCandidates: [prediction]
+        predictionCandidates: [prediction],
+        prefersTypoCorrection: true
     )
 
-    #expect(candidates == [typoCorrection])
+    #expect(candidates == [typoCorrection, prediction])
+    #expect(SegmentsManager.preferredPredictionCandidates(
+        typoCorrectionCandidates: [typoCorrection],
+        predictionCandidates: [prediction],
+        prefersTypoCorrection: false
+    ) == [prediction, typoCorrection])
 }
 
 @Test func testPreferredPredictionCandidatesFallbackToPredictionCandidates() async throws {
@@ -52,7 +58,8 @@ import Testing
 
     let candidates = SegmentsManager.preferredPredictionCandidates(
         typoCorrectionCandidates: [],
-        predictionCandidates: [prediction]
+        predictionCandidates: [prediction],
+        prefersTypoCorrection: true
     )
 
     #expect(candidates == [prediction])

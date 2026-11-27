@@ -425,8 +425,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: false)
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
         case .enterCandidateSelectionMode:
-            self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: true)
-            self.segmentsManager.update(requestRichCandidates: true)
+            self.segmentsManager.enterCandidateSelection(inputStyle: self.inputStyle)
         case .appendToMarkedText(let string):
             // 英語モードの場合は.directでローマ字変換せずそのまま入力
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
@@ -655,9 +654,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        let predictions = self.requestPreferredPredictionCandidates()
+        let predictions = self.segmentsManager.requestPreferredPredictionCandidates()
         if predictions.isEmpty {
-            self.lastPredictionCandidates.removeAll { $0.isMixedLanguage }
+            self.lastPredictionCandidates.removeAll { $0.isMixedLanguage || $0.isTypoCorrection }
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
             if elapsed < 1.0, !self.lastPredictionCandidates.isEmpty {
@@ -670,21 +669,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         self.predictionHideWorkItem?.cancel()
-        let candidates = predictions.map { prediction in
-            Candidate(
-                text: prediction.displayText,
-                value: 0,
-                composingCount: .surfaceCount(prediction.displayText.count),
-                lastMid: 0,
-                data: []
-            )
-        }
-
         self.lastPredictionCandidates = predictions
         self.lastPredictionUpdateTime = Date().timeIntervalSince1970
 
         self.predictionViewController.updateCandidatePresentations(
-            candidates.map { .init(candidate: $0) },
+            self.predictionPresentations(predictions),
             selectionIndex: nil,
             cursorLocation: self.predictionCursorLocation(useCached: useCachedPosition)
         )
@@ -720,24 +709,30 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     private func showCachedPredictionWindow(useCachedPosition: Bool) {
-        let candidates = self.lastPredictionCandidates.map { prediction in
-            Candidate(
-                text: prediction.displayText,
-                value: 0,
-                composingCount: .surfaceCount(prediction.displayText.count),
-                lastMid: 0,
-                data: []
-            )
-        }
-        guard !candidates.isEmpty else {
+        guard !self.lastPredictionCandidates.isEmpty else {
             return
         }
         self.predictionViewController.updateCandidatePresentations(
-            candidates.map { .init(candidate: $0) },
+            self.predictionPresentations(self.lastPredictionCandidates),
             selectionIndex: nil,
             cursorLocation: self.predictionCursorLocation(useCached: useCachedPosition)
         )
         self.predictionWindow.orderFront(nil)
+    }
+
+    private func predictionPresentations(_ predictions: [SegmentsManager.PredictionCandidate]) -> [CandidatePresentation] {
+        predictions.map { prediction in
+            .init(
+                candidate: Candidate(
+                    text: prediction.displayText,
+                    value: 0,
+                    composingCount: .surfaceCount(prediction.displayText.count),
+                    lastMid: 0,
+                    data: []
+                ),
+                displayContext: .init(annotationText: prediction.isTypoCorrection ? "訂正" : nil)
+            )
+        }
     }
 
     private func predictionCursorLocation(useCached: Bool) -> CGPoint {
@@ -782,19 +777,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         if self.predictionWindow.isVisible, self.lastPredictionCandidates.indices.contains(index) {
             let prediction = self.lastPredictionCandidates[index]
             self.segmentsManager.acceptPredictionCandidate(prediction)
-            if prediction.isMixedLanguage {
+            if prediction.isMixedLanguage && !prediction.isTypoCorrection {
                 self.hidePredictionWindow()
             }
         } else {
             self.segmentsManager.acceptPredictionCandidate()
         }
-    }
-
-    private func requestPreferredPredictionCandidates() -> [SegmentsManager.PredictionCandidate] {
-        SegmentsManager.preferredPredictionCandidates(
-            typoCorrectionCandidates: self.segmentsManager.requestTypoCorrectionPredictionCandidates(),
-            predictionCandidates: self.segmentsManager.requestPredictionCandidates()
-        )
     }
 
     var retryCount = 0
