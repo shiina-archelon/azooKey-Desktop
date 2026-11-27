@@ -163,7 +163,8 @@ actor TypoCorrectionPredictionGenerator {
             }
             var original = ComposingText()
             original.insertAtCursorPosition(originalReading, inputStyle: .direct)
-            guard let originalCandidate = convertedCandidates(for: original, options: dictionaryOptions).first,
+            let originalCandidates = convertedCandidates(for: original, options: dictionaryOptions)
+            guard let originalCandidate = originalCandidates.first(where: { $0.text.toHiragana() != originalReading }),
                   originalCandidate.data.count > 1 else { return nil }
 
             var best: TypoCorrection?
