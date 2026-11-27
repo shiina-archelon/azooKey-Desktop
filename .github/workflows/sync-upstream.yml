@@ -1,0 +1,33 @@
+name: 本家mainをupstreamに同期
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+
+jobs:
+  sync:
+    if: github.repository == 'shiina-archelon/azooKey-Desktop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: upstreamを本家mainに揃える
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          comparison="repos/$GITHUB_REPOSITORY/compare/upstream...azooKey:main"
+          status="$(gh api "$comparison" --jq .status)"
+          case "$status" in
+            identical|ahead) ;;
+            *)
+              echo "upstreamに本家mainに含まれないコミットがあります (status: $status)。" >&2
+              exit 1
+              ;;
+          esac
+          gh api --method POST "repos/$GITHUB_REPOSITORY/merge-upstream" -f branch=upstream
+          test "$(gh api "$comparison" --jq .status)" = identical
