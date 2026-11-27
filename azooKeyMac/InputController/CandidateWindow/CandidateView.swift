@@ -132,7 +132,7 @@ class CandidatesViewController: NumberedCandidatesViewController {
 
 class PredictionCandidatesViewController: NumberedCandidatesViewController {
     private let numberTabStop: CGFloat = 16
-    private let candidateTabStop: CGFloat = 36
+    private let candidateTabStop: CGFloat = 29
     private let prefixSymbolName = "arrow.forward.to.line.compact"
     private let prefixFontSize: CGFloat = 12
 
