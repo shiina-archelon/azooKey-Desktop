@@ -5,6 +5,7 @@ IGNORE_LINT=false
 DRY_RUN=false
 NO_PKILL=false
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT"
 # 純正 azooKey (/Library/Input Methods/azooKeyMac.app) と併存させるため別名で設置する。
 # bundle ID も別なので、入力ソース一覧に 2 つ並んで切り替えられる。
 INSTALL_APP_PATH="/Library/Input Methods/azooKeyForkMac.app"
@@ -38,14 +39,48 @@ else
 fi
 
 
-# Check if xcpretty is installed
-if command -v xcpretty &> /dev/null
-then
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates | xcpretty
+BUILD_DIR="$REPO_ROOT/build"
+ARCHIVE_PATH="$BUILD_DIR/archive.xcarchive"
+STAGING_DIR="$BUILD_DIR/.install-build"
+STAGED_ARCHIVE="$STAGING_DIR/archive.xcarchive"
+PREVIOUS_ARCHIVE="$STAGING_DIR/previous.xcarchive"
+
+mkdir -p "$BUILD_DIR"
+if ! mkdir "$STAGING_DIR"; then
+    printf '別のビルドが実行中か、中断したビルドの作業領域が残っています。場所 %s\n' "$STAGING_DIR" >&2
+    exit 1
+fi
+
+cleanup_archive() {
+    if [[ -d "$PREVIOUS_ARCHIVE" && ! -e "$ARCHIVE_PATH" ]]; then
+        if ! mv "$PREVIOUS_ARCHIVE" "$ARCHIVE_PATH"; then
+            printf '直前のアーカイブを %s に保持しています。\n' "$PREVIOUS_ARCHIVE" >&2
+            return 1
+        fi
+    fi
+    rm -rf "$STAGING_DIR"
+}
+trap cleanup_archive EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+ARCHIVE_COMMAND=(xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath "$STAGED_ARCHIVE" -allowProvisioningUpdates)
+if command -v xcpretty &> /dev/null; then
+    "${ARCHIVE_COMMAND[@]}" | xcpretty
 else
     echo "xcpretty could not be found. Proceeding without xcpretty."
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates
+    "${ARCHIVE_COMMAND[@]}"
 fi
+
+if [[ ! -d "$STAGED_ARCHIVE/Products/Applications/azooKeyMac.app" ]]; then
+    printf 'アーカイブに azooKeyMac.app がありません。場所 %s\n' "$STAGED_ARCHIVE" >&2
+    exit 1
+fi
+if [[ -e "$ARCHIVE_PATH" || -L "$ARCHIVE_PATH" ]]; then
+    mv "$ARCHIVE_PATH" "$PREVIOUS_ARCHIVE"
+fi
+mv "$STAGED_ARCHIVE" "$ARCHIVE_PATH"
+rm -rf "$PREVIOUS_ARCHIVE"
 
 ARCHIVED_APP="build/archive.xcarchive/Products/Applications/azooKeyMac.app"
 
